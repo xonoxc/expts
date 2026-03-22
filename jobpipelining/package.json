@@ -1,0 +1,26 @@
+{
+   "name": "jobpipelining",
+   "module": "index.ts",
+   "type": "module",
+   "scripts": {
+      "dev": "bun run --watch src/index.ts"
+   },
+   "private": true,
+   "devDependencies": {
+      "@types/better-sqlite3": "^7.6.13",
+      "@types/bun": "latest",
+      "drizzle-kit": "^0.31.10"
+   },
+   "peerDependencies": {
+      "typescript": "^5"
+   },
+   "dependencies": {
+      "@tailwindcss/vite": "^4.2.2",
+      "better-sqlite3": "^12.8.0",
+      "drizzle": "^1.4.0",
+      "drizzle-orm": "^0.45.1",
+      "hono": "^4.12.8",
+      "neverthrow": "^8.2.0",
+      "tailwindcss": "^4.2.2"
+   }
+}

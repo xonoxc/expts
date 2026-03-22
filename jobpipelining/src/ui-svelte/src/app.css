@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+   --color-purple-400: #c084fc;
+   --color-purple-500: #a855f7;
+   --color-purple-600: #9333ea;
+   --color-emerald-500: #10b981;
+   --color-emerald-600: #059669;
+   --color-rose-500: #f43f5e;
+   --color-rose-400: #fb7185;
+   --color-zinc-900: #18181b;
+   --color-zinc-950: #09090b;
+}
+
+body {
+   margin: 0;
+}
