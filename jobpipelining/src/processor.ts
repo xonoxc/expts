@@ -1,5 +1,6 @@
-import { err, fromPromise, ok, Result } from "neverthrow"
+import { err, ok, Result } from "neverthrow"
 import { storage } from "./db"
+import { attempt } from "./ui/src/utils/attempt"
 
 export async function processJOB(jobId: string): Promise<Result<boolean, Error>> {
    const queingRes = await retryResult({
@@ -64,9 +65,11 @@ async function retryResult<T>({ fn, retries }: { fn: () => Promise<T>; retries: 
    }
 
    for (let i = 0; i < retries - 1; i++) {
-      const result = await fromPromise(fn(), e => e as Error)
-      if (result.isOk()) return result
+      const result = await attempt(fn())
+      if (result.isOk()) {
+         return result
+      }
    }
 
-   return fromPromise(fn(), e => e as Error)
+   return attempt(fn())
 }

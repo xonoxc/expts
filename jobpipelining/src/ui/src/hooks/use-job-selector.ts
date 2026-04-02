@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
-import { fromPromise } from "neverthrow"
 import { jobApi, type Job } from "../api/jobs"
 import { useJobEventStream } from "./usejobevenstream"
+import { SafeStringifyJSON } from "../utils/json"
+import { attempt } from "../utils/attempt"
 
 export function useJobSelector(onSelectJobs?: (jobs: Job[]) => void) {
    const [selectedJobs, setSelectedJobs] = useState<Job[]>([])
@@ -28,24 +29,25 @@ export function useJobSelector(onSelectJobs?: (jobs: Job[]) => void) {
 
    const handleCreateJob = async () => {
       setIsCreating(true)
-      try {
-         const payload = JSON.stringify({
-            task: `Task ${Date.now()}`,
-            data: Math.random() * 100,
-         })
 
-         const result = await jobApi.createJob(payload)
-         if (result.success && result.job) {
-            setSelectedJobs(prev => {
-               const newJobs = [...prev, result.job!]
-               onSelectJobs?.(newJobs)
-               return newJobs
-            })
-         }
-      } catch (error) {
-         console.error("Failed to create job:", error)
-      } finally {
+      const payloadRes = SafeStringifyJSON({
+         task: `Task ${Date.now()}`,
+         data: Math.random() * 100,
+      })
+      if (payloadRes.isErr()) {
          setIsCreating(false)
+         console.error("Failed to create job:", payloadRes.error)
+         return
+      }
+      const payload = payloadRes.value
+
+      const result = await jobApi.createJob(payload)
+      if (result.success && result.job) {
+         setSelectedJobs(prev => {
+            const newJobs = [...prev, result.job!]
+            onSelectJobs?.(newJobs)
+            return newJobs
+         })
       }
    }
 
@@ -67,13 +69,22 @@ export function useJobSelector(onSelectJobs?: (jobs: Job[]) => void) {
    const handleProcessJob = async (jobId: string) => {
       setIsProcessing(jobId)
 
-      const result = await fromPromise(jobApi.processJob(jobId), e =>
-         console.error("Failed to process job:", e)
-      )
+      const result = await attempt(jobApi.processJob(jobId))
+      if (result.isErr()) {
+         console.error("Failed to process job:", result.error)
+         return
+      }
 
-      if (result.isOk() && result.value.success) {
+      if (result.value.success) {
          setSelectedJobs(prev =>
-            prev.map(job => (job.id === jobId ? { ...job, status: "processing" as const } : job))
+            prev.map(job =>
+               job.id === jobId
+                  ? {
+                       ...job,
+                       status: "processing" as const,
+                    }
+                  : job
+            )
          )
       }
    }
@@ -87,13 +98,23 @@ export function useJobSelector(onSelectJobs?: (jobs: Job[]) => void) {
       await Promise.all(
          idleJobs.map(async job => {
             setIsProcessing(job.id)
-            const result = await fromPromise(jobApi.processJob(job.id), e =>
-               console.error("Failed to process job:", e)
-            )
 
-            if (result.isOk() && result.value.success) {
+            const result = await attempt(jobApi.processJob(job.id))
+            if (result.isErr()) {
+               console.error("Failed to process job:", result.error)
+               return
+            }
+
+            if (result.value.success) {
                setSelectedJobs(prev =>
-                  prev.map(j => (j.id === job.id ? { ...j, status: "processing" as const } : j))
+                  prev.map(j =>
+                     j.id === job.id
+                        ? {
+                             ...j,
+                             status: "processing" as const,
+                          }
+                        : j
+                  )
                )
             }
          })

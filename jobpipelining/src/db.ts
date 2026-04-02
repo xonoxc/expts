@@ -1,7 +1,7 @@
 import { drizzle, BunSQLiteDatabase } from "drizzle-orm/bun-sqlite"
 import { eq } from "drizzle-orm"
 import { jobs, type Job } from "./db.schema"
-import { fromPromise } from "neverthrow"
+import { attempt } from "./ui/src/utils/attempt"
 
 export type JobState =
    | { status: "idle" }
@@ -32,20 +32,19 @@ class Storage {
    }
 
    public async checkJobStatus(jobId: string) {
-      return fromPromise(this.#db.select().from(jobs).where(eq(jobs.id, jobId)), e => e as Error)
+      return attempt(this.#db.select().from(jobs).where(eq(jobs.id, jobId)))
    }
 
    public async getJob(jobId: string) {
-      return fromPromise(this.#db.select().from(jobs).where(eq(jobs.id, jobId)), e => e as Error)
+      return attempt(this.#db.select().from(jobs).where(eq(jobs.id, jobId)))
    }
 
    public async createJOB(jobData: Job) {
-      return fromPromise(
+      return attempt(
          this.#db
             .insert(jobs)
             .values({ ...jobData })
-            .returning(),
-         e => e as Error
+            .returning()
       )
    }
 
@@ -72,10 +71,7 @@ class Storage {
          return
       }
 
-      return fromPromise(
-         this.#db.update(jobs).set(updateValues).where(eq(jobs.id, jobId)).returning(),
-         e => e as Error
-      )
+      return attempt(this.#db.update(jobs).set(updateValues).where(eq(jobs.id, jobId)).returning())
    }
 }
 

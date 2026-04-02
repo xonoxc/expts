@@ -101,7 +101,6 @@ app.post("/api/process/:jobId", async ctx => {
 
 app.get("/api/jobs/status", async ctx => {
    const jobIds = ctx.req.query("jobIds")?.split(",").filter(Boolean) ?? []
-   console.log("SSE: Connection for jobIds:", jobIds)
 
    const completedJobs = new Set<string>()
    const lastStatus = new Map<string, string>()
@@ -145,7 +144,6 @@ app.get("/api/jobs/status", async ctx => {
             if (job.status !== lastStatus.get(jobId)) {
                lastStatus.set(jobId, job.status as string)
 
-               console.log("SSE: Sending status for", jobId, "→", job.status)
                await stream.writeSSE({
                   event: "job-status",
                   data: JSON.stringify({
