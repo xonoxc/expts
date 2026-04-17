@@ -1,8 +1,10 @@
 const API_BASE = "http://localhost:3000"
 
+type JobStatus = "idle" | "queued" | "processing" | "completed" | "failed"
+
 export interface Job {
    id: string
-   status: "idle" | "queued" | "processing" | "completed" | "failed"
+   status:JobStatus 
    payload: string
    result?: string
    error?: string
