@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"os"
 
-	appErr "boot.dev/linko/internal"
 	"github.com/mattn/go-isatty"
 	pkgerr "github.com/pkg/errors"
+	appErr "xonoxc/linko/internal"
 )
 
 type StackTracer interface {

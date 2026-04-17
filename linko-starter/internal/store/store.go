@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	appErr "boot.dev/linko/internal"
+	appErr "xonoxc/linko/internal"
 )
 
 type ShortURL struct {

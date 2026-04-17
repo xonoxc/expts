@@ -13,9 +13,9 @@ import (
 	"slices"
 	"syscall"
 
-	"boot.dev/linko/internal/build"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
+	"xonoxc/linko/internal/build"
 )
 
 func main() {

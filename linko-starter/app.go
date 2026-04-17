@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"boot.dev/linko/internal/store"
+	"xonoxc/linko/internal/store"
 )
 
 type Config struct {

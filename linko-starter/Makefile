@@ -6,7 +6,7 @@ BIN_PATH := ./bin/$(BINARY_NAME)
 
 build:
 	go build \
-		-ldflags "-X boot.dev/linko/internal/build.GIT_SHA=$(GIT_SHA) -X boot.dev/linko/internal/build.BUILD_TIME=$(BUILD_TIME)"\
+		-ldflags "-X xonoxc/linko/internal/build.GIT_SHA=$(GIT_SHA) -X xonoxc/linko/internal/build.BUILD_TIME=$(BUILD_TIME)"\
 		-o $(BIN_PATH)
 
 run: build
