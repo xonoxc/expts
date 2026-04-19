@@ -69,6 +69,8 @@ var sensitiveKeys = []string{
 	"secret",
 	"pin",
 	"creditcardno",
+	"user",
+	"username",
 }
 
 func mustSetupLogging() (*slog.Logger, closeFunc, error) {

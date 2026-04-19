@@ -5,10 +5,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const logContextKey contextKey = "log_context"
@@ -42,6 +46,12 @@ func requestLogger(logger *slog.Logger) HandlerReturnFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
+				userInfo := r.URL.User
+
+				if _, ok := userInfo.Password(); ok {
+					userInfo = url.UserPassword(userInfo.Username(), "[REDACTED]")
+				}
+
 				spyReader := &SpyReadCloser{
 					ReadCloser: r.Body,
 				}
@@ -67,11 +77,7 @@ func requestLogger(logger *slog.Logger) HandlerReturnFunc {
 				logAttrs := []slog.Attr{
 					slog.String("method", ctxedReq.Method),
 					slog.String("url", ctxedReq.URL.Path),
-					slog.String("client_ip",
-						redactIP(
-							ctxedReq.RemoteAddr,
-						),
-					),
+					slog.String("client_ip", redactIP(ctxedReq.RemoteAddr)),
 					slog.Duration("duration", time.Since(startTime)),
 					slog.Int("request_body_bytes", spyReader.bytesRead),
 					slog.String("request_id", reqId),
@@ -81,7 +87,10 @@ func requestLogger(logger *slog.Logger) HandlerReturnFunc {
 				}
 
 				if logCtx.Error != nil {
-					logAttrs = append(logAttrs, slog.Any("http_error", logCtx.Error))
+					logAttrs = append(
+						logAttrs, slog.Any(
+							"http_error", logCtx.Error),
+					)
 				}
 
 				logger.LogAttrs(
@@ -121,4 +130,41 @@ func (w *spyResponseWriter) Write(p []byte) (int, error) {
 func (w *spyResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+var httpReqTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "total number of HTTP requests",
+	},
+	[]string{"method", "path", "status"},
+)
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec := &statusRecorder{
+			ResponseWriter: w,
+			status:         http.StatusOK,
+		}
+
+		next.ServeHTTP(rec, r)
+
+		path := r.URL.Path
+		method := r.Method
+		status := strconv.Itoa(rec.status)
+
+		httpReqTotal.
+			WithLabelValues(method, path, status).
+			Inc()
+	})
 }
