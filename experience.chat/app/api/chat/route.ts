@@ -6,7 +6,7 @@ import type { Chunk } from "@/lib/chunk-schema"
 
 const systemPrompt = `You are a helpful assistant that responds in structured chunks.
 Each chunk must have: id (number), text (string), pace ("slow"|"normal"|"fast"), pauseAfter (number in seconds), and optional emphasis (boolean).
-Return a JSON array of chunks.`
+Return a JSON array of chunks. Do NOT wrap the response in markdown code blocks or backticks. Output only the JSON array.`
 
 const groq = createGroq({
    apiKey: process.env.AI_API_KEY!,
@@ -39,6 +39,8 @@ export async function POST(req: Request) {
          content: result.error instanceof Error ? result.error.message : "Unknown error from AI",
       })
    }
+
+   console.log("Raw AI response:", result.value.output)
 
    const chunkRes = attemptSync<Chunk[]>(() => JSON.parse(result.value.output))
    if (chunkRes.isErr()) {
