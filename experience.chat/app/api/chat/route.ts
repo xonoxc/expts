@@ -1,12 +1,9 @@
 import { generateText } from "ai"
 import { createGroq } from "@ai-sdk/groq"
 import { attempt, attemptSync } from "@/lib/utils/attempt"
+import { systemPrompt } from "@/consts/prompt"
 
 import type { Chunk } from "@/lib/chunk-schema"
-
-const systemPrompt = `You are a helpful assistant that responds in structured chunks.
-Each chunk must have: id (number), text (string), pace ("slow"|"normal"|"fast"), pauseAfter (number in seconds), and optional emphasis (boolean).
-Return a JSON array of chunks. Do NOT wrap the response in markdown code blocks or backticks. Output only the JSON array.`
 
 const groq = createGroq({
    apiKey: process.env.AI_API_KEY!,
@@ -40,8 +37,6 @@ export async function POST(req: Request) {
       })
    }
 
-   console.log("Raw AI response:", result.value.output)
-
    const chunkRes = attemptSync<Chunk[]>(() => JSON.parse(result.value.output))
    if (chunkRes.isErr()) {
       console.error("Failed to parse AI response as JSON:", chunkRes.error)
@@ -60,5 +55,26 @@ export async function POST(req: Request) {
       })
    }
 
-   return Response.json({ type: "chunks", content: chunks })
+   const stream = new ReadableStream({
+      async start(controller) {
+         for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i]
+            controller.enqueue(`data: ${JSON.stringify(chunk)}\n\n`)
+
+            if (i < chunks.length - 1) {
+               await new Promise(resolve => setTimeout(resolve, 10))
+            }
+         }
+         controller.enqueue(`data: [DONE]\n\n`)
+         controller.close()
+      },
+   })
+
+   return new Response(stream, {
+      headers: {
+         "Content-Type": "text/event-stream",
+         "Cache-Control": "no-cache",
+         Connection: "keep-alive",
+      },
+   })
 }
