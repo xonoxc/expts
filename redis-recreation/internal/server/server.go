@@ -69,16 +69,22 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn, wg *sync.WaitGro
 	defer wg.Done()
 	defer conn.Close()
 
-	// start a  in  a seperate goroutine loop here that will accept command and write responses
-
-	// there will be a fixed size buffer here
-	// in whici ill read messages into
+	buf := make([]byte, 4096)
 	for {
-		// n , err := conn.Read(&buf)
+		_, err := conn.Read(buf)
+		if err != nil {
+			conn.Write([]byte("\nErr:failed reading btyes\n"))
+			continue
+		}
+
 		// something like that
+		// command , err := command.Parse(buf[:n])
 
 		// if err write a response to the client
 
-		// byte response to the clinet here
+		// parse command
+
+		// execute the comamand
+		// return result to the client
 	}
 }

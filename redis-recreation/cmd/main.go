@@ -48,7 +48,6 @@ func main() {
 	case <-done:
 		log.Println("graceful shutdown complete")
 	case <-time.After(30 * time.Second):
-
 		log.Println("shutdown timed out")
 	}
 }
