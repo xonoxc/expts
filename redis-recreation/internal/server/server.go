@@ -9,6 +9,8 @@ import (
 	"github.com/xonoxc/expts/redis-recreation/internal/store"
 )
 
+const SERVER_DEFAULT_PORT = ":6379"
+
 type Server struct {
 	lnAddr string
 	ln     net.Listener
