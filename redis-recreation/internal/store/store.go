@@ -28,22 +28,23 @@ func New() *Store {
 * The GC goroutine removes the expired enteries
 * from the store
 **/
-func (s *Store) StartStoreGC(ctx context.Context) {
+func (s *Store) StartStoreGC(ctx context.Context, wg *sync.WaitGroup) {
 	ticker := time.NewTicker(time.Second)
 
-	go func() {
-		defer ticker.Stop()
+	wg.Go(
+		func() {
+			defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				s.clearExpired()
+			for {
+				select {
+				case <-ticker.C:
+					s.clearExpired()
 
-			case <-ctx.Done():
-				return
+				case <-ctx.Done():
+					return
+				}
 			}
-		}
-	}()
+		})
 }
 
 func (s *Store) clearExpired() {

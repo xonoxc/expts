@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 
 	"github.com/xonoxc/expts/redis-recreation/internal/store"
 )
@@ -25,7 +26,7 @@ func NewServer(lnAddr string, store *store.Store) *Server {
 	}
 }
 
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) Start(ctx context.Context, wg *sync.WaitGroup) error {
 	ln, err := net.Listen("tcp", s.lnAddr)
 	if err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
@@ -38,12 +39,12 @@ func (s *Server) Start(ctx context.Context) error {
 		ln.Close()
 	}()
 
-	s.connLoop(ctx)
+	s.connLoop(ctx, wg)
 
 	return nil
 }
 
-func (s *Server) connLoop(ctx context.Context) {
+func (s *Server) connLoop(ctx context.Context, wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -57,13 +58,17 @@ func (s *Server) connLoop(ctx context.Context) {
 
 			log.Println("got new connection => IP:", conn.RemoteAddr())
 
-			go s.handleConn(ctx, conn)
+			wg.Add(1)
+			go s.handleConn(ctx, conn, wg)
 
 		}
 	}
 }
 
-func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
+func (s *Server) handleConn(ctx context.Context, conn net.Conn, wg *sync.WaitGroup) {
+	defer wg.Done()
+	defer conn.Close()
+
 	// start a  in  a seperate goroutine loop here that will accept command and write responses
 
 	// there will be a fixed size buffer here
