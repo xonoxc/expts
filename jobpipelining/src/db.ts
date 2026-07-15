@@ -71,7 +71,12 @@ class Storage {
          return
       }
 
-      return attempt(this.#db.update(jobs).set(updateValues).where(eq(jobs.id, jobId)).returning())
+      return attempt(
+			this.#db
+				.update(jobs)
+				.set(updateValues)
+				.where(eq(jobs.id, jobId)).returning()
+		)
    }
 }
 

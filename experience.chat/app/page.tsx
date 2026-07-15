@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { attempt } from "@/lib/utils/attempt"
+import { attempt, attemptSync } from "@/lib/utils/attempt"
 import { usePlaybackStore } from "@/store/playback-store"
 import { AIMessage } from "@/components/AIMessage"
 import { UserMessage } from "@/components/UserMessage"
@@ -20,7 +20,13 @@ export default function Page() {
       if (!input.trim()) return
 
       const userMessage = input.trim()
-      setUserMessages(prev => [...prev, { content: userMessage }])
+      setUserMessages(prev => [
+         ...prev,
+         {
+            content: userMessage,
+         },
+      ])
+
       setInput("")
       reset()
       setLoading(true)
@@ -66,45 +72,54 @@ export default function Page() {
       }
 
       let buffer = ""
-      try {
-         while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
+      while (true) {
+         const readRes = await attempt(reader.read())
+         if (readRes.isErr()) {
+            console.error("Stream error:", readRes.error)
+            return
+         }
 
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split("\n\n")
-            buffer = lines.pop() || ""
+         const { done, value } = readRes.value
+         if (done) break
 
-            for (const line of lines) {
-               if (line.startsWith("data: ")) {
-                  const data = line.slice(6)
-                  if (data === "[DONE]") {
-                     break
-                  }
-                  try {
-                     const chunk = JSON.parse(data)
-                     collectedChunks.push(chunk)
-                  } catch {
-                     console.error("Failed to parse chunk:", data)
-                  }
+         buffer += decoder.decode(value, {
+            stream: true,
+         })
+         const lines = buffer.split("\n\n")
+         buffer = lines.pop() || ""
+
+         for (const line of lines) {
+            if (line.startsWith("data: ")) {
+               const data = line.slice(6)
+               if (data === "[DONE]") {
+                  break
                }
+
+               const chunkRes = attemptSync(() => JSON.parse(data))
+               if (chunkRes.isErr()) {
+                  console.error("Failed to parse chunk:", data)
+                  return
+               }
+
+               collectedChunks.push(chunkRes.value)
             }
          }
-      } catch (err) {
-         console.error("Stream error:", err)
       }
 
-      if (collectedChunks.length > 0) {
-         usePlaybackStore.getState().setChunks(collectedChunks)
-      } else {
+      if (collectedChunks.length < 0) {
          setError("No chunks received from AI")
+         return
       }
+
+      usePlaybackStore.getState().setChunks(collectedChunks)
 
       setLoading(false)
    }
 
    useEffect(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      messagesEndRef.current?.scrollIntoView({
+         behavior: "smooth",
+      })
    }, [userMessages, chunks, currentIndex])
 
    return (
