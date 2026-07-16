@@ -7,7 +7,7 @@ import (
 )
 
 type Entry struct {
-	data       string
+	Data       string
 	expiration time.Time
 }
 
@@ -65,7 +65,7 @@ func (s *Store) Set(key, value string) {
 	defer s.mu.Unlock()
 
 	s.enteries[key] = Entry{
-		data:       value,
+		Data:       value,
 		expiration: time.Time{},
 	}
 }
@@ -90,7 +90,7 @@ func (s *Store) SetWithExpiration(key, value string, ttl time.Duration) {
 	defer s.mu.Unlock()
 
 	s.enteries[key] = Entry{
-		data:       value,
+		Data:       value,
 		expiration: time.Now().Add(ttl),
 	}
 }

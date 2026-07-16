@@ -65,7 +65,7 @@ func (s *Server) connLoop(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (s *Server) handleConn(ctx context.Context, conn net.Conn, wg *sync.WaitGroup) {
+func (s *Server) handleConn(_ context.Context, conn net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer conn.Close()
 
