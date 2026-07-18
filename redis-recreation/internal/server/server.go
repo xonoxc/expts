@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"sync"
 
+	"github.com/xonoxc/expts/redis-recreation/internal/command"
+	"github.com/xonoxc/expts/redis-recreation/internal/resp"
 	"github.com/xonoxc/expts/redis-recreation/internal/store"
 )
 
@@ -71,20 +74,59 @@ func (s *Server) handleConn(_ context.Context, conn net.Conn, wg *sync.WaitGroup
 
 	buf := make([]byte, 4096)
 	for {
-		_, err := conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			conn.Write([]byte("\nErr:failed reading btyes\n"))
 			continue
 		}
 
-		// something like that
-		// command , err := command.Parse(buf[:n])
+		parser := resp.NewParser()
+		parsedBytes, err := parser.Parse(buf[:n])
+		if err != nil {
+			switch true {
+			case errors.Is(err, resp.ErrEmptyBuffer):
+				conn.Write([]byte("\nErr:reading empty btyes\n"))
+				continue
 
-		// if err write a response to the client
+			case errors.Is(err, resp.ErrMalFormedBytes):
+				conn.Write([]byte("\nErr:invalid payload\n"))
+				continue
 
-		// parse command
+			case errors.Is(err, resp.ErrIncomplete):
+				conn.Write([]byte("\nErr:incomplete payload\n"))
+				continue
 
-		// execute the comamand
-		// return result to the client
+			default:
+				conn.Write([]byte("\nErr:unexpected unkown error while reading payload\n"))
+				continue
+			}
+		}
+
+		cmd := command.NewCommand(parsedBytes[0], parsedBytes[1:])
+		dsptr := command.NewDispatcher(s.store)
+
+		responseBytes, err := dsptr.Dispatch(cmd)
+		if err != nil {
+			switch true {
+			case errors.Is(err, command.ErrInvalidSyntax):
+				conn.Write([]byte("\nErr:invalid syntax\n"))
+				continue
+
+			case errors.Is(err, command.ErrrUnkownCommand):
+				conn.Write([]byte("\nErr:invalid unkwon command\n"))
+				continue
+
+			case errors.Is(err, command.ErrInvalidExpirationTime):
+				conn.Write([]byte("\nErr:invalid expiration time\n"))
+				continue
+
+			default:
+				conn.Write([]byte("\nErr:unexpected unkown error while reading payload\n"))
+				continue
+			}
+		}
+
+		conn.Write(responseBytes)
+		continue
 	}
 }
