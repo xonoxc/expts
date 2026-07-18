@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/xonoxc/expts/redis-recreation/internal/resp"
 	"github.com/xonoxc/expts/redis-recreation/internal/store"
 )
 
@@ -32,13 +33,9 @@ func (dsp *Dispatcher) Dispatch(cmd Command) ([]byte, error) {
 	case "SET":
 		if len(cmd.Args) == 2 {
 			dsp.repo.Set(cmd.Args[0], cmd.Args[1])
-			return nil, nil
+			return resp.SerializeSimpleString("OK"), nil
 		}
 
-		// if the args have ['key' , 'value',  'EX' , 'expiration_time']
-		// i don't support PX or anything beyound set with expiration
-		// because this is my recreation i don't have time for perfectionism.
-		// i just want to learn.
 		if len(cmd.Args) == 4 {
 			if cmd.Args[2] != "EX" {
 				return nil, ErrInvalidSyntax
@@ -50,25 +47,28 @@ func (dsp *Dispatcher) Dispatch(cmd Command) ([]byte, error) {
 			}
 
 			dsp.repo.SetWithExpiration(cmd.Args[0], cmd.Args[1], time.Duration(expInt)*time.Second)
+			return resp.SerializeSimpleString("OK"), nil
 		}
 
-		return nil, nil
+		return nil, ErrInvalidSyntax
 
 	case "GET":
 		if len(cmd.Args) != 1 {
 			return nil, ErrNotEnoughArguements
 		}
 
-		resp, exists := dsp.repo.Get(cmd.Args[0])
+		rsp, exists := dsp.repo.Get(cmd.Args[0])
 		if !exists {
-			return []byte("(nil)"), nil
+			return resp.SerializeNull(), nil
 		}
 
-		return []byte(resp.Data), nil
+		return resp.SerializeBulkString(rsp.Data), nil
 
 	case "DELETE":
-		dsp.repo.Delete(cmd.Args[0])
-		return nil, nil
+		dsp.repo.Delete(
+			cmd.Args[0],
+		)
+		return resp.SerializeInteger(1), nil
 
 	default:
 		return nil, ErrrUnkownCommand

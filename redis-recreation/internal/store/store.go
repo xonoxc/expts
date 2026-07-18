@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -38,6 +39,7 @@ func (s *Store) StartStoreGC(ctx context.Context, wg *sync.WaitGroup) {
 			for {
 				select {
 				case <-ticker.C:
+					log.Println("Running GC...")
 					s.clearExpired()
 
 				case <-ctx.Done():
@@ -55,6 +57,7 @@ func (s *Store) clearExpired() {
 
 	for key, entry := range s.enteries {
 		if !entry.expiration.IsZero() && now.After(entry.expiration) {
+			log.Printf("Deleting expired entry: %s\n", key)
 			delete(s.enteries, key)
 		}
 	}
@@ -74,8 +77,8 @@ func (s *Store) Get(key string) (Entry, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	value, exists := s.enteries[key]
-	return value, exists
+	entry, exists := s.enteries[key]
+	return entry, exists
 }
 
 func (s *Store) Delete(key string) {

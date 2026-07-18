@@ -1,9 +1,12 @@
 package command
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/xonoxc/expts/redis-recreation/internal/resp"
 	"github.com/xonoxc/expts/redis-recreation/internal/store"
 )
 
@@ -15,17 +18,20 @@ func TestDispatchSETAndGet(t *testing.T) {
 	st := newTestStore()
 	d := NewDispatcher(st)
 
-	_, err := d.Dispatch(Command{Name: "SET", Args: []string{"foo", "bar"}})
+	got, err := d.Dispatch(Command{Name: "SET", Args: []string{"foo", "bar"}})
 	if err != nil {
 		t.Fatalf("SET returned error: %v", err)
 	}
+	if string(got) != string(resp.SerializeSimpleString("OK")) {
+		t.Fatalf("expected OK got %s", got)
+	}
 
-	got, err := d.Dispatch(Command{Name: "GET", Args: []string{"foo"}})
+	got, err = d.Dispatch(Command{Name: "GET", Args: []string{"foo"}})
 	if err != nil {
 		t.Fatalf("GET returned error: %v", err)
 	}
-	if string(got) != "bar" {
-		t.Fatalf("expected bar got %s", got)
+	if string(got) != string(resp.SerializeBulkString("bar")) {
+		t.Fatalf("expected $3\\r\\nbar\\r\\n got %s", got)
 	}
 }
 
@@ -37,8 +43,8 @@ func TestDispatchGETNonExistent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET returned error: %v", err)
 	}
-	if string(got) != "(nil)" {
-		t.Fatalf("expected (nil) got %s", got)
+	if string(got) != string(resp.SerializeNull()) {
+		t.Fatalf("expected null got %s", got)
 	}
 }
 
@@ -47,17 +53,20 @@ func TestDispatchDELETE(t *testing.T) {
 	d := NewDispatcher(st)
 
 	d.Dispatch(Command{Name: "SET", Args: []string{"k", "v"}})
-	_, err := d.Dispatch(Command{Name: "DELETE", Args: []string{"k"}})
+	got, err := d.Dispatch(Command{Name: "DELETE", Args: []string{"k"}})
 	if err != nil {
 		t.Fatalf("DELETE returned error: %v", err)
 	}
+	if string(got) != string(resp.SerializeInteger(1)) {
+		t.Fatalf("expected :1\\r\\n got %s", got)
+	}
 
-	got, err := d.Dispatch(Command{Name: "GET", Args: []string{"k"}})
+	got, err = d.Dispatch(Command{Name: "GET", Args: []string{"k"}})
 	if err != nil {
 		t.Fatalf("GET returned error: %v", err)
 	}
-	if string(got) != "(nil)" {
-		t.Fatalf("expected (nil) after delete got %s", got)
+	if string(got) != string(resp.SerializeNull()) {
+		t.Fatalf("expected null after delete got %s", got)
 	}
 }
 
@@ -74,8 +83,8 @@ func TestDispatchSETWithEX(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET returned error: %v", err)
 	}
-	if string(got) != "v" {
-		t.Fatalf("expected v got %s", got)
+	if string(got) != string(resp.SerializeBulkString("v")) {
+		t.Fatalf("expected $1\\r\\nv\\r\\n got %s", got)
 	}
 }
 
@@ -157,7 +166,7 @@ func TestDispatchSETOverwritesPreviousValue(t *testing.T) {
 	d.Dispatch(Command{Name: "SET", Args: []string{"k", "second"}})
 
 	got, _ := d.Dispatch(Command{Name: "GET", Args: []string{"k"}})
-	if string(got) != "second" {
+	if string(got) != string(resp.SerializeBulkString("second")) {
 		t.Fatalf("expected second got %s", got)
 	}
 }
@@ -165,6 +174,11 @@ func TestDispatchSETOverwritesPreviousValue(t *testing.T) {
 func TestDispatchSETExValueExpires(t *testing.T) {
 	st := newTestStore()
 	d := NewDispatcher(st)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+	st.StartStoreGC(ctx, &wg)
 
 	_, err := d.Dispatch(Command{Name: "SET", Args: []string{"k", "v", "EX", "1"}})
 	if err != nil {
@@ -177,8 +191,8 @@ func TestDispatchSETExValueExpires(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET returned error: %v", err)
 	}
-	if string(got) != "(nil)" {
-		t.Fatalf("expected (nil) after expiration got %s", got)
+	if string(got) != string(resp.SerializeNull()) {
+		t.Fatalf("expected null after expiration got %s", got)
 	}
 }
 
