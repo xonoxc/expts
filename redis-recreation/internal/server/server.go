@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
+	"time"
 
-	"github.com/xonoxc/expts/redis-recreation/internal/command"
+	cmd "github.com/xonoxc/expts/redis-recreation/internal/command"
 	"github.com/xonoxc/expts/redis-recreation/internal/resp"
 	"github.com/xonoxc/expts/redis-recreation/internal/store"
 )
@@ -52,13 +54,11 @@ func (s *Server) connLoop(ctx context.Context, wg *sync.WaitGroup) {
 		select {
 		case <-ctx.Done():
 			return
-
 		default:
 			conn, err := s.ln.Accept()
 			if err != nil {
 				continue
 			}
-
 			log.Println("got new connection => IP:", conn.RemoteAddr())
 
 			wg.Add(1)
@@ -68,65 +68,113 @@ func (s *Server) connLoop(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (s *Server) handleConn(_ context.Context, conn net.Conn, wg *sync.WaitGroup) {
+func (s *Server) handleConn(ctx context.Context, conn net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer conn.Close()
 
+	parser := resp.NewParser()
+	dsptr := cmd.NewDispatcher(s.store)
+
 	buf := make([]byte, 4096)
 	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		conn.SetReadDeadline(time.Now().Add(time.Second))
+
 		n, err := conn.Read(buf)
 		if err != nil {
-			conn.Write([]byte("\nErr:failed reading btyes\n"))
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+
+			if errors.Is(err, io.EOF) {
+				log.Printf("connection closed by client: %s\n", conn.RemoteAddr())
+				return
+			}
+
+			log.Printf("network error ocurred: %v\n", err)
+			return
+		}
+		log.Printf("received %d bytes from %s\n", n, conn.RemoteAddr())
+
+		parsedBytes, err := parser.Parse(buf[:n])
+		if err != nil {
+			switch {
+			case errors.Is(err, resp.ErrEmptyBuffer):
+				rsp := resp.SerializeError("reading empty bytes")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
+
+			case errors.Is(err, resp.ErrMalFormedBytes):
+				rsp := resp.SerializeError("invalid payload")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
+
+			case errors.Is(err, resp.ErrIncomplete):
+				rsp := resp.SerializeError("incomplete payload")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
+
+			default:
+				rsp := resp.SerializeError("unexpected error while reading payload")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
+			}
 			continue
 		}
 
-		parser := resp.NewParser()
-		parsedBytes, err := parser.Parse(buf[:n])
+		comm := cmd.NewCommand(
+			parsedBytes[0],
+			parsedBytes[1:],
+		)
+
+		responseBytes, err := dsptr.Dispatch(comm)
 		if err != nil {
-			switch true {
-			case errors.Is(err, resp.ErrEmptyBuffer):
-				conn.Write([]byte("\nErr:reading empty btyes\n"))
-				continue
+			switch {
+			case errors.Is(err, cmd.ErrInvalidSyntax):
+				rsp := resp.SerializeError("invalid syntax")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
 
-			case errors.Is(err, resp.ErrMalFormedBytes):
-				conn.Write([]byte("\nErr:invalid payload\n"))
-				continue
+			case errors.Is(err, cmd.ErrrUnkownCommand):
+				rsp := resp.SerializeError("invalid unkwon command")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
 
-			case errors.Is(err, resp.ErrIncomplete):
-				conn.Write([]byte("\nErr:incomplete payload\n"))
-				continue
+			case errors.Is(err, cmd.ErrInvalidExpirationTime):
+				rsp := resp.SerializeError("invalid expiration time")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
 
 			default:
-				conn.Write([]byte("\nErr:unexpected unkown error while reading payload\n"))
-				continue
+				rsp := resp.SerializeError("unexpected unkown error while reading payload")
+				if err := write(conn, rsp); err != nil {
+					return
+				}
 			}
+			continue
 		}
 
-		cmd := command.NewCommand(parsedBytes[0], parsedBytes[1:])
-		dsptr := command.NewDispatcher(s.store)
-
-		responseBytes, err := dsptr.Dispatch(cmd)
-		if err != nil {
-			switch true {
-			case errors.Is(err, command.ErrInvalidSyntax):
-				conn.Write([]byte("\nErr:invalid syntax\n"))
-				continue
-
-			case errors.Is(err, command.ErrrUnkownCommand):
-				conn.Write([]byte("\nErr:invalid unkwon command\n"))
-				continue
-
-			case errors.Is(err, command.ErrInvalidExpirationTime):
-				conn.Write([]byte("\nErr:invalid expiration time\n"))
-				continue
-
-			default:
-				conn.Write([]byte("\nErr:unexpected unkown error while reading payload\n"))
-				continue
-			}
+		if err := write(conn, responseBytes); err != nil {
+			return
 		}
-
-		conn.Write(responseBytes)
-		continue
 	}
+}
+
+func write(conn net.Conn, data []byte) error {
+	_, err := conn.Write(data)
+	if err != nil {
+		log.Printf("write failed: %v", err)
+	}
+
+	return err
 }
