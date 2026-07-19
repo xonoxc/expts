@@ -21,7 +21,7 @@ type Server struct {
 	ln     net.Listener
 	store  *store.Store
 	conns  map[net.Conn]struct{}
-	mu     *sync.Mutex
+	mu     sync.Mutex
 }
 
 func NewServer(lnAddr string, store *store.Store) *Server {
@@ -30,7 +30,6 @@ func NewServer(lnAddr string, store *store.Store) *Server {
 		ln:     nil,
 		store:  store,
 		conns:  make(map[net.Conn]struct{}),
-		mu:     &sync.Mutex{},
 	}
 }
 
@@ -69,8 +68,10 @@ func (s *Server) connLoop(wg *sync.WaitGroup) {
 		}
 		log.Println("got new connection => IP:", conn.RemoteAddr())
 
-		wg.Add(1)
-		go s.handleConn(conn, wg)
+		s.RegisterConnection(conn)
+		wg.Go(func() {
+			s.handleConn(conn)
+		})
 
 	}
 }
@@ -88,11 +89,8 @@ func (s *Server) UnregisterConnection(conn net.Conn) {
 	delete(s.conns, conn)
 }
 
-func (s *Server) handleConn(conn net.Conn, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
-
-	s.RegisterConnection(conn)
 	defer s.UnregisterConnection(conn)
 
 	parser := resp.NewParser()
