@@ -26,9 +26,7 @@ func main() {
 	store := store.New()
 	store.StartStoreGC(ctx, &wg)
 
-	svr := server.NewServer(
-		server.SERVER_DEFAULT_PORT, store,
-	)
+	svr := server.NewServer(server.SERVER_DEFAULT_PORT, store)
 
 	log.Printf("server started at port %s", server.SERVER_DEFAULT_PORT)
 
