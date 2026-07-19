@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"sync"
-	"time"
 
 	cmd "github.com/xonoxc/expts/redis-recreation/internal/command"
 	"github.com/xonoxc/expts/redis-recreation/internal/resp"
@@ -21,6 +20,8 @@ type Server struct {
 	lnAddr string
 	ln     net.Listener
 	store  *store.Store
+	conns  map[net.Conn]struct{}
+	mu     *sync.Mutex
 }
 
 func NewServer(lnAddr string, store *store.Store) *Server {
@@ -28,6 +29,8 @@ func NewServer(lnAddr string, store *store.Store) *Server {
 		lnAddr: lnAddr,
 		ln:     nil,
 		store:  store,
+		conns:  make(map[net.Conn]struct{}),
+		mu:     &sync.Mutex{},
 	}
 }
 
@@ -44,45 +47,59 @@ func (s *Server) Start(ctx context.Context, wg *sync.WaitGroup) error {
 		ln.Close()
 	}()
 
-	s.connLoop(ctx, wg)
+	wg.Go(
+		func() {
+			s.connLoop(wg)
+		},
+	)
 
 	return nil
 }
 
-func (s *Server) connLoop(ctx context.Context, wg *sync.WaitGroup) {
+func (s *Server) connLoop(wg *sync.WaitGroup) {
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			conn, err := s.ln.Accept()
-			if err != nil {
-				continue
+		conn, err := s.ln.Accept()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
 			}
-			log.Println("got new connection => IP:", conn.RemoteAddr())
 
-			wg.Add(1)
-			go s.handleConn(ctx, conn, wg)
-
+			log.Printf("failed to accept connection: %v\n", err)
+			continue
 		}
+		log.Println("got new connection => IP:", conn.RemoteAddr())
+
+		wg.Add(1)
+		go s.handleConn(conn, wg)
+
 	}
 }
 
-func (s *Server) handleConn(ctx context.Context, conn net.Conn, wg *sync.WaitGroup) {
+func (s *Server) RegisterConnection(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conns[conn] = struct{}{}
+}
+
+func (s *Server) UnregisterConnection(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.conns, conn)
+}
+
+func (s *Server) handleConn(conn net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer conn.Close()
+
+	s.RegisterConnection(conn)
+	defer s.UnregisterConnection(conn)
 
 	parser := resp.NewParser()
 	dsptr := cmd.NewDispatcher(s.store)
 
 	buf := make([]byte, 4096)
 	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		conn.SetReadDeadline(time.Now().Add(time.Second))
-
 		n, err := conn.Read(buf)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
@@ -167,6 +184,15 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn, wg *sync.WaitGro
 		if err := write(conn, responseBytes); err != nil {
 			return
 		}
+	}
+}
+
+func (s *Server) Shutdown() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for conn := range s.conns {
+		conn.Close()
 	}
 }
 

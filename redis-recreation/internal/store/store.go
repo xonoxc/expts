@@ -32,21 +32,20 @@ func New() *Store {
 func (s *Store) StartStoreGC(ctx context.Context, wg *sync.WaitGroup) {
 	ticker := time.NewTicker(time.Second)
 
-	wg.Go(
-		func() {
-			defer ticker.Stop()
+	wg.Go(func() {
+		defer ticker.Stop()
 
-			for {
-				select {
-				case <-ticker.C:
-					log.Println("Running GC...")
-					s.clearExpired()
+		for {
+			select {
+			case <-ticker.C:
+				log.Println("Running GC...")
+				s.clearExpired()
 
-				case <-ctx.Done():
-					return
-				}
+			case <-ctx.Done():
+				return
 			}
-		})
+		}
+	})
 }
 
 func (s *Store) clearExpired() {

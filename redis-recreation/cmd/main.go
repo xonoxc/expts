@@ -32,10 +32,13 @@ func main() {
 
 	log.Printf("server started at port %s", server.SERVER_DEFAULT_PORT)
 
-	err := svr.Start(ctx, &wg)
-	if err != nil {
+	if err := svr.Start(ctx, &wg); err != nil {
 		log.Fatal(err)
 	}
+
+	<-ctx.Done()
+
+	svr.Shutdown()
 
 	done := make(chan struct{})
 
