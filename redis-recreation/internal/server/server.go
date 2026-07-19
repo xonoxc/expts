@@ -100,12 +100,13 @@ func (s *Server) handleConn(conn net.Conn) {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				continue
-			}
-
 			if errors.Is(err, io.EOF) {
 				log.Printf("connection closed by client: %s\n", conn.RemoteAddr())
+				return
+			}
+
+			if errors.Is(err, net.ErrClosed) {
+				log.Printf("connection closed during shutdown: %s", conn.RemoteAddr())
 				return
 			}
 
