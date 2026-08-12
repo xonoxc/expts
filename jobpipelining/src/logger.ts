@@ -2,18 +2,18 @@ import type { Context, Next } from "hono"
 import { attempt } from "./ui/src/utils/attempt"
 
 export function betterLogger() {
-	return async (c: Context, next: Next) => {
+	return async (ctx: Context, next: Next) => {
 		const start = Date.now()
 		const requestId = crypto.randomUUID()
 
-		c.set("requestId", requestId)
+		ctx.set("requestId", requestId)
 
-		console.log(`[REQ] ${requestId} → ${c.req.method} ${c.req.path}`)
+		console.log(`[REQ] ${requestId} → ${ctx.req.method} ${ctx.req.path}`)
 
 		const res = await attempt(next())
 		if(res.isErr()){
 			const duration = Date.now() - start
-			console.error(`[ERR] ${requestId} ✖ ${c.req.method} ${c.req.path} (${duration}ms)`)
+			console.error(`[ERR] ${requestId} ✖ ${ctx.req.method} ${ctx.req.path} (${duration}ms)`)
 			console.error(res.error)
 
 			throw res.error
@@ -21,6 +21,6 @@ export function betterLogger() {
 
 		const duration = Date.now() - start
 
-		console.log(`[RES] ${requestId} ← ${c.res.status} (${duration}ms)`)
+		console.log(`[RES] ${requestId} ← ${ctx.res.status} (${duration}ms)`)
 	}
 }
