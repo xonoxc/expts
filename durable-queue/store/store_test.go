@@ -5,12 +5,25 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"durqueue/job"
 )
 
+func setup(t *testing.T) *SqliteStore {
+	t.Helper()
+	store := NewSqliteStore()
+	store.Db.Exec("DELETE FROM jobs")
+	t.Cleanup(func() {
+		store.Db.Exec("DELETE FROM jobs")
+		store.Close()
+	})
+	return store
+}
+
 func TestStore_InsertGet(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
+
 	ctx := context.Background()
 
 	want := job.Job{ID: "job-1"}
@@ -30,7 +43,7 @@ func TestStore_InsertGet(t *testing.T) {
 }
 
 func TestStore_GetMissing(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
 
 	_, err := store.Get(context.Background(), "missing")
 
@@ -40,7 +53,8 @@ func TestStore_GetMissing(t *testing.T) {
 }
 
 func TestStore_Update(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
+
 	ctx := context.Background()
 
 	if err := store.Insert(ctx, job.Job{ID: "1"}); err != nil {
@@ -64,7 +78,7 @@ func TestStore_Update(t *testing.T) {
 }
 
 func TestStore_UpdateMissing(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
 
 	err := store.Update(
 		context.Background(),
@@ -77,7 +91,8 @@ func TestStore_UpdateMissing(t *testing.T) {
 }
 
 func TestStore_Delete(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
+
 	ctx := context.Background()
 
 	if err := store.Insert(ctx, job.Job{ID: "1"}); err != nil {
@@ -95,7 +110,7 @@ func TestStore_Delete(t *testing.T) {
 }
 
 func TestStore_DeleteMissing(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
 
 	err := store.Delete(context.Background(), "missing")
 
@@ -105,7 +120,8 @@ func TestStore_DeleteMissing(t *testing.T) {
 }
 
 func TestStore_InsertDuplicate(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
+
 	ctx := context.Background()
 
 	if err := store.Insert(ctx, job.Job{ID: "1"}); err != nil {
@@ -120,7 +136,8 @@ func TestStore_InsertDuplicate(t *testing.T) {
 }
 
 func TestStore_OperationsAreIndependent(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
+
 	ctx := context.Background()
 
 	jobs := []job.Job{
@@ -156,8 +173,10 @@ func TestStore_OperationsAreIndependent(t *testing.T) {
 }
 
 func TestStore_ConcurrentAccess(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
-	ctx := context.Background()
+	store := setup(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	const workers = 100
 
@@ -184,7 +203,7 @@ func TestStore_ConcurrentAccess(t *testing.T) {
 }
 
 func TestStore_CancelledContext(t *testing.T) {
-	store := NewSqliteStore[job.Job]()
+	store := setup(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

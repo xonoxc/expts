@@ -46,7 +46,7 @@ func MustConnect() *sql.DB {
 func MustRunMigrations(db *sql.DB) {
 	initQuery := `
  	 CREATE TABLE IF NOT EXISTS jobs (
-	   id INTEGER PRIMARY KEY 
+	   id PRIMARY KEY 
 	 )
 	`
 	_, err := db.Exec(initQuery)
@@ -100,6 +100,35 @@ func (str *SqliteStore) Get(ctx context.Context, id string) (job.Job, error) {
 	return res, nil
 }
 
+func (str *SqliteStore) Update(ctx context.Context, value job.Job) error {
+	id := strings.TrimSpace(value.ID)
+	if id == "" {
+		return errors.New("error: id is required")
+	}
+
+	query := `
+		UPDATE jobs
+		SET id = ?
+		WHERE id = ?
+	`
+
+	res, err := str.Db.ExecContext(ctx, query, id, id)
+	if err != nil {
+		return fmt.Errorf("error update job %s: %w", id, err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error check update job %s: %w", id, err)
+	}
+
+	if n == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
 func (str *SqliteStore) Delete(ctx context.Context, id string) error {
 	parsedId := strings.TrimSpace(id)
 	if parsedId == "" {
@@ -110,12 +139,25 @@ func (str *SqliteStore) Delete(ctx context.Context, id string) error {
 	   DELETE FROM jobs WHERE id = ? 
 	`
 
-	_, err := str.Db.ExecContext(
+	res, err := str.Db.ExecContext(
 		ctx, query, id,
 	)
 	if err != nil {
 		return fmt.Errorf("error delete job: %w", err)
 	}
 
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error check delete job: %w", err)
+	}
+
+	if n == 0 {
+		return ErrNotFound
+	}
+
 	return nil
+}
+
+func (s *SqliteStore) Close() error {
+	return s.Db.Close()
 }

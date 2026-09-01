@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -77,20 +78,23 @@ func TestQueue_DequeueEmpty_Blocks(t *testing.T) {
 
 func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
 	q := NewQueue[job.Job]()
-	ctx := context.Background()
 
-	done := make(chan job.Job)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan job.Job, 1)
+	ready := make(chan struct{})
 
 	go func() {
+		close(ready)
 		job, err := q.Dequeue(ctx)
 		if err != nil {
-			t.Error(err)
 			return
 		}
 		done <- job
 	}()
 
-	time.Sleep(10 * time.Millisecond)
+	<-ready
 
 	q.Enqueue(job.Job{ID: "job-1"})
 
@@ -106,15 +110,20 @@ func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
 
 func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
 	q := NewQueue[job.Job]()
-	ctx := context.Background()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	results := make(chan job.Job, 2)
 
+	var started sync.WaitGroup
+	started.Add(2)
+
 	for range 2 {
 		go func() {
+			started.Done()
 			job, err := q.Dequeue(ctx)
 			if err != nil {
-				t.Error(err)
 				return
 			}
 
@@ -122,7 +131,7 @@ func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
 		}()
 	}
 
-	time.Sleep(10 * time.Millisecond)
+	started.Wait()
 
 	if err := q.Enqueue(job.Job{ID: "job-1"}); err != nil {
 		t.Fatal(err)
@@ -143,4 +152,6 @@ func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 		// expected: second consumer remains blocked
 	}
+
+	cancel()
 }
