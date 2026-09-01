@@ -72,3 +72,73 @@ func TestQueue_DequeueEmpty_Blocks(t *testing.T) {
 		t.Fatalf("expected deadline exceeded, got %v", err)
 	}
 }
+
+func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
+	q := NewQueue[Job]()
+	ctx := context.Background()
+
+	done := make(chan Job)
+
+	go func() {
+		job, err := q.Dequeue(ctx)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		done <- job
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	q.Enqueue(Job{ID: "job-1"})
+
+	select {
+	case got := <-done:
+		if got.ID != "job-1" {
+			t.Fatalf("got %s, want job-1", got.ID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("consumer never received job")
+	}
+}
+
+func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
+	q := NewQueue[Job]()
+	ctx := context.Background()
+
+	results := make(chan Job, 2)
+
+	for range 2 {
+		go func() {
+			job, err := q.Dequeue(ctx)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			results <- job
+		}()
+	}
+
+	time.Sleep(10 * time.Millisecond)
+
+	if err := q.Enqueue(Job{ID: "job-1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case got := <-results:
+		if got.ID != "job-1" {
+			t.Fatalf("got %s, want job-1", got.ID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no consumer received job")
+	}
+
+	select {
+	case got := <-results:
+		t.Fatalf("job was delivered twice: %+v", got)
+	case <-time.After(50 * time.Millisecond):
+		// expected: second consumer remains blocked
+	}
+}
