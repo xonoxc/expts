@@ -1,4 +1,4 @@
-package main
+package que
 
 import (
 	"context"
@@ -6,13 +6,15 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"durqueue/job"
 )
 
 func TestQueue_EnqueueDequeue(t *testing.T) {
-	q := NewQueue[Job]()
+	q := NewQueue[job.Job]()
 	ctx := context.Background()
 
-	want := Job{ID: "job-1"}
+	want := job.Job{ID: "job-1"}
 
 	err := q.Enqueue(want)
 	if err != nil {
@@ -30,10 +32,10 @@ func TestQueue_EnqueueDequeue(t *testing.T) {
 }
 
 func TestQueue_FIFO(t *testing.T) {
-	q := NewQueue[Job]()
+	q := NewQueue[job.Job]()
 	ctx := context.Background()
 
-	jobs := []Job{
+	jobs := []job.Job{
 		{ID: "1"},
 		{ID: "2"},
 		{ID: "3"},
@@ -58,7 +60,7 @@ func TestQueue_FIFO(t *testing.T) {
 }
 
 func TestQueue_DequeueEmpty_Blocks(t *testing.T) {
-	q := NewQueue[Job]()
+	q := NewQueue[job.Job]()
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
@@ -74,10 +76,10 @@ func TestQueue_DequeueEmpty_Blocks(t *testing.T) {
 }
 
 func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
-	q := NewQueue[Job]()
+	q := NewQueue[job.Job]()
 	ctx := context.Background()
 
-	done := make(chan Job)
+	done := make(chan job.Job)
 
 	go func() {
 		job, err := q.Dequeue(ctx)
@@ -90,7 +92,7 @@ func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	q.Enqueue(Job{ID: "job-1"})
+	q.Enqueue(job.Job{ID: "job-1"})
 
 	select {
 	case got := <-done:
@@ -103,10 +105,10 @@ func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
 }
 
 func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
-	q := NewQueue[Job]()
+	q := NewQueue[job.Job]()
 	ctx := context.Background()
 
-	results := make(chan Job, 2)
+	results := make(chan job.Job, 2)
 
 	for range 2 {
 		go func() {
@@ -122,7 +124,7 @@ func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	if err := q.Enqueue(Job{ID: "job-1"}); err != nil {
+	if err := q.Enqueue(job.Job{ID: "job-1"}); err != nil {
 		t.Fatal(err)
 	}
 
