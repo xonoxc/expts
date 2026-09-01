@@ -3,28 +3,35 @@ package que
 import (
 	"context"
 	"sync"
+
+	"durqueue/job"
+	"durqueue/store"
 )
 
-type Queue[T any] struct {
+type Queue struct {
 	mu       sync.Mutex
-	enteries []T
+	enteries []job.Job
 	notify   chan struct{}
+	store    store.Store
 }
 
-func NewQueue[T any]() *Queue[T] {
-	enteries := make([]T, 0, 10)
+func NewQueue(str store.Store) *Queue {
+	enteries := make([]job.Job, 0, 10)
 	notiChan := make(chan struct{}, 1)
 
-	return &Queue[T]{
+	return &Queue{
 		enteries: enteries,
 		notify:   notiChan,
+		store:    str,
 	}
 }
 
-func (q *Queue[T]) Enqueue(entry T) error {
-	q.mu.Lock()
-	q.enteries = append(q.enteries, entry)
-	q.mu.Unlock()
+func (q *Queue) Enqueue(ctx context.Context, entry job.Job) error {
+	if err := q.store.Insert(ctx, entry); err != nil {
+		return err
+	}
+
+	q.append(entry)
 
 	select {
 	case q.notify <- struct{}{}:
@@ -35,8 +42,15 @@ func (q *Queue[T]) Enqueue(entry T) error {
 	return nil
 }
 
-func (q *Queue[T]) Dequeue(ctx context.Context) (T, error) {
-	var zero T
+func (q *Queue) append(entry job.Job) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.enteries = append(q.enteries, entry)
+}
+
+func (q *Queue) Dequeue(ctx context.Context) (job.Job, error) {
+	var zero job.Job
 
 	for {
 		q.mu.Lock()

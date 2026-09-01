@@ -17,7 +17,9 @@ var ErrNotFound = errors.New("job not found")
 type Store interface {
 	Insert(ctx context.Context, value job.Job) error
 	Get(ctx context.Context, id string) (job.Job, error)
+	Update(ctx context.Context, value job.Job) error
 	Delete(ctx context.Context, id string) error
+	Close() error
 }
 
 type SqliteStore struct {
@@ -32,6 +34,23 @@ func NewSqliteStore() *SqliteStore {
 	return &SqliteStore{
 		Db: db,
 	}
+}
+
+func NewSqliteStoreWith(db *sql.DB) *SqliteStore {
+	MustRunMigrations(db)
+
+	return &SqliteStore{
+		Db: db,
+	}
+}
+
+func ConnectInMemory() *sql.DB {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic("error initializing sqlite store")
+	}
+
+	return db
 }
 
 func MustConnect() *sql.DB {

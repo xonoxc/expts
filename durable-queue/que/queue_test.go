@@ -2,6 +2,7 @@ package que
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"reflect"
 	"sync"
@@ -9,15 +10,26 @@ import (
 	"time"
 
 	"durqueue/job"
+	"durqueue/store"
 )
 
+func newTestQueue(t *testing.T) *Queue {
+	t.Helper()
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return NewQueue(store.NewSqliteStoreWith(db))
+}
+
 func TestQueue_EnqueueDequeue(t *testing.T) {
-	q := NewQueue[job.Job]()
+	q := newTestQueue(t)
 	ctx := context.Background()
 
 	want := job.Job{ID: "job-1"}
 
-	err := q.Enqueue(want)
+	err := q.Enqueue(ctx, want)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +45,7 @@ func TestQueue_EnqueueDequeue(t *testing.T) {
 }
 
 func TestQueue_FIFO(t *testing.T) {
-	q := NewQueue[job.Job]()
+	q := newTestQueue(t)
 	ctx := context.Background()
 
 	jobs := []job.Job{
@@ -43,7 +55,7 @@ func TestQueue_FIFO(t *testing.T) {
 	}
 
 	for _, job := range jobs {
-		if err := q.Enqueue(job); err != nil {
+		if err := q.Enqueue(ctx, job); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -61,7 +73,7 @@ func TestQueue_FIFO(t *testing.T) {
 }
 
 func TestQueue_DequeueEmpty_Blocks(t *testing.T) {
-	q := NewQueue[job.Job]()
+	q := newTestQueue(t)
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
@@ -77,7 +89,7 @@ func TestQueue_DequeueEmpty_Blocks(t *testing.T) {
 }
 
 func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
-	q := NewQueue[job.Job]()
+	q := newTestQueue(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -96,7 +108,9 @@ func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
 
 	<-ready
 
-	q.Enqueue(job.Job{ID: "job-1"})
+	if err := q.Enqueue(ctx, job.Job{ID: "job-1"}); err != nil {
+		t.Fatal(err)
+	}
 
 	select {
 	case got := <-done:
@@ -109,7 +123,7 @@ func TestQueue_WaitingConsumerReceivesEnqueuedJob(t *testing.T) {
 }
 
 func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
-	q := NewQueue[job.Job]()
+	q := newTestQueue(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -133,7 +147,7 @@ func TestQueue_OneJobDeliveredToOneConsumer(t *testing.T) {
 
 	started.Wait()
 
-	if err := q.Enqueue(job.Job{ID: "job-1"}); err != nil {
+	if err := q.Enqueue(ctx, job.Job{ID: "job-1"}); err != nil {
 		t.Fatal(err)
 	}
 
