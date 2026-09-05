@@ -55,12 +55,24 @@ func (p *Pool) Acquire(ctx context.Context) (net.Conn, error) {
 		}
 
 		if p.currSize < p.maxSize {
+			p.currSize++
+			p.mu.Unlock()
+
 			conn, err := p.factory()
+
+			p.mu.Lock()
+
 			if err != nil {
+				p.currSize--
+				p.cond.Signal()
 				return nil, err
 			}
 
-			p.currSize++
+			if p.closed {
+				p.currSize--
+				conn.Close()
+				return nil, ErrPoolClosed
+			}
 
 			return conn, nil
 		}
