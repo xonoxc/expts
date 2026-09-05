@@ -10,18 +10,22 @@ import (
 var ErrPoolClosed = errors.New("pool is already closed")
 
 type Pool struct {
-	mu      sync.Mutex
-	cond    *sync.Cond
-	conns   []net.Conn
-	closed  bool
-	maxSize int
+	mu       sync.Mutex
+	cond     *sync.Cond
+	conns    []net.Conn
+	closed   bool
+	currSize int
+	maxSize  int
+	factory  func() (net.Conn, error)
 }
 
-func NewPool(maxSize int) *Pool {
+func NewPool(maxSize int, fac func() (net.Conn, error)) *Pool {
 	pool := &Pool{
-		conns:   make([]net.Conn, 0, maxSize),
-		maxSize: maxSize,
-		closed:  false,
+		conns:    make([]net.Conn, 0, maxSize),
+		maxSize:  maxSize,
+		closed:   false,
+		currSize: 0,
+		factory:  fac,
 	}
 
 	pool.cond = sync.NewCond(&pool.mu)
@@ -42,22 +46,34 @@ func (p *Pool) Acquire(ctx context.Context) (net.Conn, error) {
 
 	p.initContextWatcher(ctx, done)
 
-	for len(p.conns) == 0 && !p.closed {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+	for !p.closed {
+		if len(p.conns) > 0 {
+			conn := p.conns[0]
+			p.conns = p.conns[1:]
+
+			return conn, nil
+		}
+
+		if p.currSize < p.maxSize {
+			conn, err := p.factory()
+			if err != nil {
+				return nil, err
+			}
+
+			p.currSize++
+
+			return conn, nil
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 
 		p.cond.Wait()
+
 	}
 
-	if p.closed {
-		return nil, ErrPoolClosed
-	}
-
-	conn := p.conns[0]
-	p.conns = p.conns[1:]
-
-	return conn, nil
+	return nil, ErrPoolClosed
 }
 
 func (p *Pool) Release(ctx context.Context, conn net.Conn) error {
@@ -68,25 +84,13 @@ func (p *Pool) Release(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 
-	done := make(chan struct{})
-	defer close(done)
-
-	p.initContextWatcher(ctx, done)
-
-	for len(p.conns) == p.maxSize && !p.closed {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		p.cond.Wait()
-	}
-
 	if p.closed {
+		conn.Close()
 		return ErrPoolClosed
 	}
 
 	p.conns = append(p.conns, conn)
-	p.cond.Broadcast()
+	p.cond.Signal()
 
 	return nil
 }
