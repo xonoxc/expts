@@ -1,4 +1,7 @@
 profile=default
 break-infix=fit-or-vertical
 break-cases = all
+type-decl = sparse
+break-fun-decl = smart
+match-indent-nested = never
 if-then-else = vertical
