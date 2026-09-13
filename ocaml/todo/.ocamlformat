@@ -1,0 +1,4 @@
+profile=default
+break-infix=fit-or-vertical
+break-cases = all
+if-then-else = vertical

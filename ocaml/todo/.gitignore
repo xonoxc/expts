@@ -1,0 +1,7 @@
+# Build artifacts
+_build/
+
+# Opam local switch
+_opam/
+
+.DS_Store
