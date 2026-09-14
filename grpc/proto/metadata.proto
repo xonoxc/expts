@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+
+package metadata;
+
+
+service MetadataService {
+  rpc GetMetadata (MetadataRequest) returns (MetadataResponse);
+}
+
+
+message MetadataRequest {
+  string key = 1;
+}
+
+message MetadataResponse {
+  string title = 1;
+  int32 status_code = 2;
+}

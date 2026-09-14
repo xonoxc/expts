@@ -1,0 +1,20 @@
+{
+  "name": "server",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "types:generate": "mkdir ./generated && protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_opt=outputServices=grpc-js --ts_proto_out=./generated --proto_path=../proto ../proto/metadata.proto"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "ts-proto": "^2.12.3"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1"
+  }
+}
