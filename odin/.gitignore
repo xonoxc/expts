@@ -1,0 +1,27 @@
+# Build output
+bin/
+build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Odin emits an extensionless executable next to the sources, named after the
+# package directory (e.g. `odin build todo` writes ./todo/todo).
+/todo/todo
+/smd/simd
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
