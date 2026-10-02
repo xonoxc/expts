@@ -178,9 +178,6 @@ main :: proc() {
 			}
 
 		case:
-			// FIX #10: added default case. Choice(int_val) can be a value that is
-			// not 1/2/3 (e.g. "9"), and previously that did nothing at all and
-			// silently looped back with no message.
 			fmt.println("invalid choice choose again..")
 
 		}
