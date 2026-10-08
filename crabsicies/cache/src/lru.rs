@@ -1,7 +1,7 @@
 #[derive(Debug)]
-pub struct Entry {
-    pub key: String,
-    pub val: String,
+struct Entry {
+    key: String,
+    val: String,
 }
 
 #[derive(Debug)]
@@ -19,11 +19,11 @@ impl Cache {
     }
 
     pub fn get(&mut self, key: &str) -> Option<String> {
-        if let Some(idx) = self.enteries.iter().position(|entery| entery.key == key) {
-            let entry = self.enteries.remove(idx);
-            let val = entry.val.clone();
+        if let Some(idx) = self.enteries.iter_mut().position(|e| e.key == key) {
+            let ent = self.enteries.remove(idx);
+            let val = ent.val.clone();
 
-            self.enteries.insert(0, entry);
+            self.enteries.insert(0, ent);
 
             return Some(val);
         }
@@ -36,7 +36,7 @@ impl Cache {
             return;
         }
 
-        if let Some(idx) = self.enteries.iter().position(|entery| entery.key == key) {
+        if let Some(idx) = self.enteries.iter_mut().position(|e| e.key == key) {
             self.enteries.remove(idx);
         }
 
