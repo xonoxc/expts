@@ -14,7 +14,7 @@ void init_read(int socket_fd);
 void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len);
 
 
-int main(int argc, char *argv[])
+int main(void)
 {
 	int socket_fd; 
 	struct sockaddr_in address;
@@ -80,7 +80,16 @@ void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len)
 			client_port
 		);
 
-		init_read(conn_sock_fd);
+
+		{
+			pid_t pid  = fork();
+
+			if(pid == 0) {
+				init_read(conn_sock_fd);
+				close(conn_sock_fd);
+				exit(0);
+			}
+		}
 	}
 }
 
@@ -88,9 +97,6 @@ void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len)
 void init_read(int socket_fd) 
 {
 	char buffer[10324];
-
-	int retry_count = 0;
-
 	for(;;){
 		int bytes_read = recv(socket_fd , buffer , sizeof(buffer) , 0);
 		if (bytes_read < 0) {
