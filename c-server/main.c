@@ -8,11 +8,8 @@
 #include <asm-generic/errno-base.h>
 #include<errno.h>
 
-
-
 void init_read(int socket_fd);
 void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len);
-
 
 int main(void)
 {
@@ -89,6 +86,15 @@ void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len)
 				close(conn_sock_fd);
 				exit(0);
 			}
+
+			if (pid < 0) {
+				perror("fork failed");
+				close(conn_sock_fd);
+				continue;
+			}
+
+			if (pid > 0) close(conn_sock_fd);
+
 		}
 	}
 }
@@ -110,7 +116,7 @@ void init_read(int socket_fd)
 		}
 
 
-		if  (bytes_read == 0){ return; }
+		if (bytes_read == 0) return; 
 
 		printf("bytes read: %d  with content: %s\n" ,(int)bytes_read , buffer);
 	}
