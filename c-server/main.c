@@ -7,9 +7,11 @@
 #include <arpa/inet.h>
 #include <asm-generic/errno-base.h>
 #include<errno.h>
+#include <sys/epoll.h>
 
-void init_read(int socket_fd);
-void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len);
+#include "main.h"
+#include "epoll.h"
+
 
 int main(void)
 {
@@ -25,7 +27,7 @@ int main(void)
 
 	memset(&address, 0, sizeof(address));
 	address.sin_family = AF_INET;
-	address.sin_port = htons(8080);
+	address.sin_port = htons(SERVER_PORT);
 	address.sin_addr.s_addr = INADDR_ANY;
 
 
@@ -36,7 +38,7 @@ int main(void)
 	}
 
 
-	printf("Socket successfully bound to port 8080\n");
+	printf("Socket successfully bound to port %d\n" , SERVER_PORT);
 
 
 	int listen_fd =  listen(socket_fd, 10);
@@ -46,8 +48,10 @@ int main(void)
 		exit(EXIT_FAILURE);
 	}
 
+	int epollfd = must_setup_epoll(socket_fd);
 
 	init_accept(
+		epollfd,
 		socket_fd, 
 		(struct sockaddr *)&address , sizeof(address)
 	);
@@ -58,69 +62,62 @@ int main(void)
 }
 
 
-void init_accept(int socket_fd , struct sockaddr* addr ,  socklen_t addr_len) 
+void init_accept(int epollfd ,int socket_fd , struct sockaddr* addr ,  socklen_t addr_len) 
 {
 	for (;;) {
-		int conn_sock_fd = accept(socket_fd , addr , &addr_len);
-		if(conn_sock_fd < 0) {
-			perror("error while acceptng connections");
-			continue;
+		int ndfs = must_watch_epoll(epollfd);
+
+		for (int i = 0 ; i < ndfs ; i++) {
+			int curr_fd = events[i].data.fd;
+
+			if(curr_fd== socket_fd) {
+
+				int conn_sockfd = accept(socket_fd , addr , &addr_len);
+				if(conn_sockfd < 0) {
+					perror("error while acceptng connections");
+					continue;
+				}
+
+				log_conn(addr);
+				must_register_conn_sock(epollfd, conn_sockfd);
+			}else {
+				char buffer[10324];
+
+				int bytes_read = recv(curr_fd , buffer , sizeof(buffer) , 0);
+				if (bytes_read < 0) {
+
+					if (errno == EINTR) { 
+						printf("connection interrrupted");
+						continue; 
+					}
+					perror("failed to read bytes");
+					exit(EXIT_FAILURE);
+				}
+
+				if (bytes_read == 0) return; 
+
+				printf("bytes read: %d  with content: %s\n" ,(int)bytes_read , buffer);
+
+			}
 		}
 
 
-		char * client_addr = inet_ntoa(((struct sockaddr_in*)addr)->sin_addr);
-		int client_port = ntohs(((struct sockaddr_in*)addr)->sin_port);
-
-		printf(
-			"Connection accepted from %s:%d\n", 
-			client_addr,
-			client_port
-		);
-
-
-		{
-			pid_t pid  = fork();
-
-			if(pid == 0) {
-				init_read(conn_sock_fd);
-				close(conn_sock_fd);
-				exit(0);
-			}
-
-			if (pid < 0) {
-				perror("fork failed");
-				close(conn_sock_fd);
-				continue;
-			}
-
-			if (pid > 0) close(conn_sock_fd);
-
-		}
 	}
 }
 
-
-void init_read(int socket_fd) 
+void log_conn(struct sockaddr* addr) 
 {
-	char buffer[10324];
-	for(;;){
-		int bytes_read = recv(socket_fd , buffer , sizeof(buffer) , 0);
-		if (bytes_read < 0) {
+	char * client_addr = inet_ntoa(((struct sockaddr_in*)addr)->sin_addr);
+	int client_port = ntohs(((struct sockaddr_in*)addr)->sin_port);
 
-			if (errno == EINTR) { 
-				printf("connection interrrupted");
-				continue; 
-			}
-			perror("failed to read bytes");
-			exit(EXIT_FAILURE);
-		}
-
-
-		if (bytes_read == 0) return; 
-
-		printf("bytes read: %d  with content: %s\n" ,(int)bytes_read , buffer);
-	}
+	printf(
+		"Connection accepted from %s:%d\n", 
+		client_addr,
+		client_port
+	);
 }
+
+
 
 
 
