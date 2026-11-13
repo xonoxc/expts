@@ -5,16 +5,16 @@
 
 QueueError queue_init(Queue *q, size_t capacity)
 {
-	if(q == NULL ||  capacity == 0) 
+	if(!q ||  capacity == 0) 
 		return QUEUE_INVALID;
 
 	q->buffer = malloc(sizeof(int) * capacity);
 
-	if (q-> buffer  == NULL)
+	if (!q-> buffer)
 		return QUEUE_SYSTEM_ERROR;
 
 
-	if (pthread_mutex_init(&q->mutex , NULL)!= 0) {
+	if (pthread_mutex_init(&q->mutex , NULL)) {
 		free(q-> buffer);
 		q->buffer = NULL;
 		return QUEUE_SYSTEM_ERROR;
@@ -30,16 +30,16 @@ QueueError queue_init(Queue *q, size_t capacity)
 
 QueueError enqueue(Queue *q , int element) 
 {
-	if (q == NULL) 
+	if (!q) 
 		return QUEUE_INVALID;
 
 	int err = pthread_mutex_lock(&q->mutex);
-	if(err != 0) 
+	if(err) 
 		return QUEUE_SYSTEM_ERROR;
 
 	if (q->size == q-> capacity) {
 		err = pthread_mutex_unlock(&q->mutex);
-		if(err != 0) 
+		if(err) 
 			return QUEUE_SYSTEM_ERROR;
 
 		return QUEUE_FULL;
@@ -52,7 +52,7 @@ QueueError enqueue(Queue *q , int element)
 
 
 	err = pthread_mutex_unlock(&q->mutex);
-	if(err != 0) 
+	if(err) 
 		return QUEUE_SYSTEM_ERROR;
 
 
@@ -62,17 +62,17 @@ QueueError enqueue(Queue *q , int element)
 
 QueueError dequeue(Queue *q , int *out) 
 {
-	if (q == NULL || out == NULL) 
+	if (!q || !out) 
 		return QUEUE_INVALID;
 
 	int err = pthread_mutex_lock(&q->mutex);
-	if(err != 0) 
+	if(err) 
 		return QUEUE_SYSTEM_ERROR;
 
 
 	if (q-> size < 1) {
 		err = pthread_mutex_unlock(&q->mutex);
-		if(err != 0) 
+		if(err) 
 			return QUEUE_SYSTEM_ERROR;
 
 		return QUEUE_EMPTY;
@@ -85,7 +85,7 @@ QueueError dequeue(Queue *q , int *out)
 
 
 	err = pthread_mutex_unlock(&q->mutex);
-	if(err != 0) 
+	if(err) 
 		return QUEUE_SYSTEM_ERROR;
 
 	return QUEUE_OK;
@@ -95,12 +95,12 @@ QueueError dequeue(Queue *q , int *out)
 
 QueueError queue_destroy(Queue *q) 
 {
-	if (q == NULL || q-> buffer == NULL) 
+	if (!q || !q-> buffer) 
 		return QUEUE_INVALID;
 
 
 	int err = pthread_mutex_destroy(&q->mutex);
-	if (err != 0) 
+	if (err) 
 		return QUEUE_SYSTEM_ERROR;
 
 
