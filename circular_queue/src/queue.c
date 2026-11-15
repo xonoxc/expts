@@ -1,4 +1,5 @@
 #include "queue.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -6,6 +7,9 @@
 QueueError queue_init(Queue *q, size_t capacity)
 {
 	if(!q ||  capacity == 0) 
+		return QUEUE_INVALID;
+
+	if (capacity > SIZE_MAX / sizeof(int))
 		return QUEUE_INVALID;
 
 	q->buffer = malloc(sizeof(int) * capacity);
@@ -20,12 +24,40 @@ QueueError queue_init(Queue *q, size_t capacity)
 		return QUEUE_SYSTEM_ERROR;
 	}
 
+	if (pthread_cond_init(&q->not_empty , NULL)) {
+		int err 
+			= pthread_mutex_destroy(&q->mutex);
+		if (err)  
+			return QUEUE_SYSTEM_ERROR;
+
+		free(q-> buffer);
+		q->buffer = NULL;
+		return QUEUE_SYSTEM_ERROR;
+	}
+
+	if (pthread_cond_init(&q->not_full , NULL)) {
+		int err 
+			= pthread_mutex_destroy(&q->mutex);
+		if (err) 
+			return QUEUE_SYSTEM_ERROR;
+
+		err = pthread_cond_destroy(&q->not_empty);
+		if (err) 
+			return QUEUE_SYSTEM_ERROR;
+
+		free(q-> buffer);
+		q->buffer = NULL;
+		return QUEUE_SYSTEM_ERROR;
+	}
+
 	q->capacity = capacity;
 	q->head = 0;
 	q->size = 0;
 	q->tail = 0;
 
+
 	return QUEUE_OK;
+
 }
 
 QueueError enqueue(Queue *q , int element) 
@@ -50,6 +82,11 @@ QueueError enqueue(Queue *q , int element)
 	q->tail = (q->tail+1) % q-> capacity;
 	q->size++;
 
+	err = pthread_cond_signal(&q->not_empty);
+	if (err) {
+		pthread_mutex_unlock(&q->mutex);
+		return QUEUE_SYSTEM_ERROR;
+	} 
 
 	err = pthread_mutex_unlock(&q->mutex);
 	if(err) 
@@ -83,6 +120,11 @@ QueueError dequeue(Queue *q , int *out)
 	q-> head = (q-> head + 1) % q-> capacity;
 	q->size--;
 
+	err = pthread_cond_signal(&q->not_full);
+	if (err) {
+		pthread_mutex_unlock(&q->mutex);
+		return QUEUE_SYSTEM_ERROR;
+	} 
 
 	err = pthread_mutex_unlock(&q->mutex);
 	if(err) 
@@ -90,8 +132,6 @@ QueueError dequeue(Queue *q , int *out)
 
 	return QUEUE_OK;
 }
-
-
 
 QueueError queue_destroy(Queue *q) 
 {
@@ -103,6 +143,13 @@ QueueError queue_destroy(Queue *q)
 	if (err) 
 		return QUEUE_SYSTEM_ERROR;
 
+	err = pthread_cond_destroy(&q->not_full);
+	if (err) 
+		return QUEUE_SYSTEM_ERROR;
+
+	err = pthread_cond_destroy(&q->not_empty);
+	if (err) 
+		return QUEUE_SYSTEM_ERROR;
 
 	free(q->buffer);
 	q->buffer = NULL;

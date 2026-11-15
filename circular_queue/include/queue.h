@@ -21,6 +21,9 @@ typedef struct {
 	size_t head;
 
 	pthread_mutex_t mutex;
+
+	pthread_cond_t not_empty;
+	pthread_cond_t not_full;
 } Queue;
 
 
