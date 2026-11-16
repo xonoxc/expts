@@ -5,7 +5,6 @@
 #include <sched.h>
 #include <stdlib.h>
 
-
 #define PRODUCER_COUNT 4
 #define CONSUMER_COUNT 4
 #define ITEMS_PER_PRODUCER 1000

@@ -1,6 +1,5 @@
 
 # circular_queue — C11 + pthreads
-
 CC       ?= gcc
 AR       ?= ar
 
@@ -39,7 +38,7 @@ ASAN_BIN    := $(ASAN_DIR)/bin/test_queue
 ASAN_LIB    := $(ASAN_DIR)/lib/libqueue.a
 
 TSAN_DIR    := $(BUILD)/tsan
-TSAN_BIN    := $(TSAN_DIR)/bin/test_queue
+TSAN_BIN    := $(TSAN_DIR)/bin/test_queue_tsan
 TSAN_LIB    := $(TSAN_DIR)/lib/libqueue.a
 
 BENCH_OBJ   := $(BUILD)/obj/bench_$(PRODUCERS)_$(CONSUMERS).o
@@ -96,22 +95,14 @@ $(ASAN_BIN): $(ASAN_DIR)/obj/test_queue.o $(ASAN_LIB)
 asan: $(ASAN_BIN)
 	./$(ASAN_BIN)
 
+
 # ThreadSanitizer
-$(TSAN_DIR)/obj/queue.o: $(SRC)/queue.c $(INCLUDE)/queue.h
+$(TSAN_BIN): $(TESTS)/test_queue_sanitize.c $(SRC)/queue.c $(INCLUDE)/queue.h
 	mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(TSAN_FLAGS) -MMD -MP -c $< -o $@
-
-$(TSAN_DIR)/obj/test_queue.o: $(TESTS)/test_queue.c $(INCLUDE)/queue.h
-	mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(TSAN_FLAGS) $(CRITERION_CFLAGS) -MMD -MP -c $< -o $@
-
-$(TSAN_LIB): $(TSAN_DIR)/obj/queue.o
-	mkdir -p $(dir $@)
-	$(AR) rcs $@ $^
-
-$(TSAN_BIN): $(TSAN_DIR)/obj/test_queue.o $(TSAN_LIB)
-	mkdir -p $(dir $@)
-	$(CC) $(LDFLAGS) $(TSAN_FLAGS) $^ $(CRITERION_LIBS) $(LDLIBS) -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TSAN_FLAGS) \
+		$(TESTS)/test_queue_sanitize.c \
+		$(SRC)/queue.c \
+		$(LDFLAGS) $(TSAN_FLAGS) $(LDLIBS) -o $@
 
 tsan: $(TSAN_BIN)
 	./$(TSAN_BIN)
