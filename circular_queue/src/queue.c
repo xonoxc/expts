@@ -36,12 +36,12 @@ QueueError queue_init(Queue *q, size_t capacity)
 	}
 
 	if (pthread_cond_init(&q->not_full , NULL)) {
-		int err 
-			= pthread_mutex_destroy(&q->mutex);
+		int err
+			= pthread_cond_destroy(&q->not_empty);
 		if (err) 
 			return QUEUE_SYSTEM_ERROR;
 
-		err = pthread_cond_destroy(&q->not_empty);
+		err = pthread_mutex_destroy(&q->mutex);
 		if (err) 
 			return QUEUE_SYSTEM_ERROR;
 
@@ -139,15 +139,15 @@ QueueError queue_destroy(Queue *q)
 		return QUEUE_INVALID;
 
 
-	int err = pthread_mutex_destroy(&q->mutex);
-	if (err) 
-		return QUEUE_SYSTEM_ERROR;
-
-	err = pthread_cond_destroy(&q->not_full);
+	int err = pthread_cond_destroy(&q->not_full);
 	if (err) 
 		return QUEUE_SYSTEM_ERROR;
 
 	err = pthread_cond_destroy(&q->not_empty);
+	if (err) 
+		return QUEUE_SYSTEM_ERROR;
+
+	err = pthread_mutex_destroy(&q->mutex);
 	if (err) 
 		return QUEUE_SYSTEM_ERROR;
 
