@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -66,7 +67,31 @@ func (q *Queue[T]) Dequeue(ctx context.Context) (T, error) {
 		case <-ctx.Done():
 			// context cancelled timed out
 			return zero, ctx.Err()
-
 		}
+	}
+}
+
+func main() {
+	q := NewQueue[int]()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			q.Enqueue(i)
+		}
+	}()
+	wg.Wait()
+
+	for {
+		entry, err := q.Dequeue(ctx)
+		if err != nil {
+			fmt.Println("dequeue:", err)
+			return
+		}
+		fmt.Println("got:", entry)
 	}
 }
