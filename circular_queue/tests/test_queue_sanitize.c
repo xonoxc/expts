@@ -17,7 +17,7 @@ static atomic_int consumed;
 static atomic_int failed;
 static atomic_int *seen;
 
-void *producer(void *arg)
+static void *producer(void *arg)
 {
     int id = *(int *)arg;
     int start = id * ITEMS_PER_PRODUCER + 1;
@@ -37,7 +37,7 @@ void *producer(void *arg)
     return NULL;
 }
 
-void *consumer(void *arg)
+static void *consumer(void *arg)
 {
     (void)arg;
 
