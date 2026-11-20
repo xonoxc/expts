@@ -27,11 +27,7 @@
 static Queue queue;
 
 static atomic_int started = 0;
-static atomic_int producers_done = 0;
 static atomic_int errors = 0;
-
-static atomic_ulong full_retries = 0;
-static atomic_ulong empty_retries = 0;
 
 typedef struct {
 	int id;
@@ -55,18 +51,13 @@ static void *producer(void *arg)
 	for (int i = first; i < first + ITEMS_PER_PRODUCER; i++) {
 		QueueError err;
 
-		while ((err = enqueue(&queue, i)) == QUEUE_FULL) {
-			atomic_fetch_add(&full_retries , 1);
-			sched_yield();
-		}
-
+		err = enqueue(&queue, i);
 		if (err != QUEUE_OK) {
 			atomic_store(&errors, 1);
 			break;
 		}
 	}
 
-	atomic_fetch_add(&producers_done, 1);
 	return NULL;
 }
 
@@ -85,15 +76,8 @@ static void *consumer(void *arg)
 			continue;
 		}
 
-		if (err == QUEUE_EMPTY) {
-			atomic_fetch_add(&empty_retries, 1);
-
-			if (atomic_load(&producers_done) == PRODUCERS)
-				break;
-
-			sched_yield();
-			continue;
-		}
+		if (err == QUEUE_SHUTDOWN)
+			break;
 
 		atomic_store(&errors, 1);
 		break;
@@ -106,8 +90,7 @@ static double elapsed_seconds(
 	struct timespec start,
 	struct timespec end)
 {
-	return (end.tv_sec - start.tv_sec) +
-	(end.tv_nsec - start.tv_nsec) / 1e9;
+	return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 }
 
 int main(void)
@@ -151,6 +134,11 @@ int main(void)
 	for (int i = 0; i < PRODUCERS; i++)
 		pthread_join(producer_threads[i], NULL);
 
+	if (queue_shutdown(&queue) != QUEUE_OK) {
+		fprintf(stderr, "Queue shutdown failed\n");
+		return EXIT_FAILURE;
+	}
+
 	for (int i = 0; i < CONSUMERS; i++)
 		pthread_join(consumer_threads[i], NULL);
 
@@ -174,8 +162,6 @@ int main(void)
 	printf("Queue ops/sec:   %.0f\n",
 		(2.0 * total_consumed) / elapsed);
 	printf("Errors:          %d\n", atomic_load(&errors));
-	printf("Full retries:  %lu\n", atomic_load(&full_retries));
-	printf("Empty retries: %lu\n", atomic_load(&empty_retries));
 
 	queue_destroy(&queue);
 

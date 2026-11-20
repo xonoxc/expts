@@ -54,6 +54,7 @@ QueueError queue_init(Queue *q, size_t capacity)
 	q->head = 0;
 	q->size = 0;
 	q->tail = 0;
+	q->shutdown = false;
 
 
 	return QUEUE_OK;
@@ -69,12 +70,21 @@ QueueError enqueue(Queue *q , int element)
 	if(err) 
 		return QUEUE_SYSTEM_ERROR;
 
-	if (q->size == q-> capacity) {
+
+	while (q->size == q-> capacity && !q->shutdown) {
+		err = pthread_cond_wait(&q->not_full, &q->mutex);
+		if (err) {
+			pthread_mutex_unlock(&q->mutex);
+			return QUEUE_SYSTEM_ERROR;
+		}
+	}
+
+	if(q->shutdown) {
 		err = pthread_mutex_unlock(&q->mutex);
 		if(err) 
 			return QUEUE_SYSTEM_ERROR;
 
-		return QUEUE_FULL;
+		return QUEUE_SHUTDOWN;
 	}
 
 	q-> buffer[q-> tail]= element;
@@ -96,7 +106,6 @@ QueueError enqueue(Queue *q , int element)
 	return QUEUE_OK;
 }
 
-
 QueueError dequeue(Queue *q , int *out) 
 {
 	if (!q || !out) 
@@ -107,12 +116,21 @@ QueueError dequeue(Queue *q , int *out)
 		return QUEUE_SYSTEM_ERROR;
 
 
-	if (q-> size < 1) {
+	while (q-> size == 0 && !q->shutdown) {
+		err = pthread_cond_wait(&q->not_empty, &q->mutex);
+		if (err) {
+			pthread_mutex_unlock(&q->mutex);
+			return QUEUE_SYSTEM_ERROR;
+		}
+	}
+
+
+	if(q->shutdown && q->size == 0) {
 		err = pthread_mutex_unlock(&q->mutex);
 		if(err) 
 			return QUEUE_SYSTEM_ERROR;
 
-		return QUEUE_EMPTY;
+		return QUEUE_SHUTDOWN;
 	}
 
 	*out = (q->buffer[q->head]);
@@ -158,8 +176,37 @@ QueueError queue_destroy(Queue *q)
 	q->size = 0;
 	q->tail= 0;
 	q->head = 0;
+	q->shutdown = false;
 
 	return QUEUE_OK;
 }
 
+QueueError queue_shutdown(Queue *q)
+{
+	if (!q || !q-> buffer)
+		return QUEUE_INVALID;
 
+	int err = pthread_mutex_lock(&q->mutex);
+	if (err)
+		return QUEUE_SYSTEM_ERROR;
+
+	q->shutdown = true;
+
+	err = pthread_cond_broadcast(&q->not_empty);
+	if (err) {
+		pthread_mutex_unlock(&q->mutex);
+		return QUEUE_SYSTEM_ERROR;
+	}
+
+	err = pthread_cond_broadcast(&q->not_full);
+	if (err) {
+		pthread_mutex_unlock(&q->mutex);
+		return QUEUE_SYSTEM_ERROR;
+	}
+
+	err = pthread_mutex_unlock(&q->mutex);
+	if (err)
+		return QUEUE_SYSTEM_ERROR;
+
+	return QUEUE_OK;
+}

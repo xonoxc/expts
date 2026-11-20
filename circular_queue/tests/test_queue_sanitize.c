@@ -2,7 +2,6 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
-#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -25,8 +24,10 @@ static void *producer(void *arg)
     for (int i = start; i < start + ITEMS_PER_PRODUCER; i++) {
         QueueError err;
 
-        while ((err = enqueue(&queue, i)) == QUEUE_FULL)
-            sched_yield();
+        err = enqueue(&queue, i);
+
+        if (err == QUEUE_SHUTDOWN)
+            break;
 
         if (err != QUEUE_OK) {
             atomic_store(&failed, 1);
@@ -45,10 +46,8 @@ static void *consumer(void *arg)
         int value;
         QueueError err = dequeue(&queue, &value);
 
-        if (err == QUEUE_EMPTY) {
-            sched_yield();
-            continue;
-        }
+        if (err == QUEUE_SHUTDOWN)
+            break;
 
         if (err != QUEUE_OK) {
             atomic_store(&failed, 1);
@@ -100,6 +99,9 @@ int main(void)
 
     for (int i = 0; i < PRODUCERS; i++)
         pthread_join(producers[i], NULL);
+
+    if (queue_shutdown(&queue) != QUEUE_OK)
+        return EXIT_FAILURE;
 
     for (int i = 0; i < CONSUMERS; i++)
         pthread_join(consumers[i], NULL);
